@@ -347,6 +347,10 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
 			// A linear format is a texture that is backed by a buffer,
 			// which allows for CPU access to the texture data via a pointer.
 			is_linear = is_valid_linear(p_format);
+			
+		}
+		else if (p_format.is_gpu_mappable){
+			options |= MTL::ResourceStorageModeShared;
 		} else {
 			options |= MTL::ResourceStorageModePrivate;
 		}
@@ -681,6 +685,21 @@ Vector<uint8_t> RenderingDeviceDriverMetal::texture_get_data(TextureID p_texture
 	DEV_ASSERT(dest_ptr - image_data.ptr() == image_data.size());
 
 	return image_data;
+}
+
+Error RenderingDeviceDriverMetal::texture_write_direct(TextureID p_texture,uint32_t p_layer, uint32_t p_mipmap,Vector3i p_size, const uint8_t *p_data, uint32_t p_row_pitch, uint32_t p_image_pitch){
+	// Schritt 1: TextureID in die Metal-Textur umwandeln
+	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
+	MTL::Texture *obj = tex_info->texture.get();
+
+	// Schritt 2: Prüfen, dass die CPU überhaupt schreiben darf
+	ERR_FAIL_COND_V_MSG(obj->storageMode() != MTL::StorageModeShared, ERR_INVALID_PARAMETER, "Error CPU need shared texture to write");
+	ERR_FAIL_NULL_V(p_data, ERR_INVALID_PARAMETER);
+	// Schritt 3: Den Zielbereich (Region) beschreiben
+	MTL::Region region(0,0,0,p_size.x, p_size.y, p_size.z);
+	// Schritt 4: Daten hineinschreiben
+	obj->replaceRegion(region, p_mipmap, p_layer,p_data, p_row_pitch, p_image_pitch);
+	return OK;
 }
 
 BitField<RDD::TextureUsageBits> RenderingDeviceDriverMetal::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
@@ -2818,6 +2837,8 @@ bool RenderingDeviceDriverMetal::has_feature(Features p_feature) {
 		}
 		case SUPPORTS_GPU_MAPPABLE_BUFFER:
 			return true;
+		case SUPPORTS_GPU_MAPPABLE_TEXTURE:
+			return device ->hasUnifiedMemory();
 		default:
 			return false;
 	}

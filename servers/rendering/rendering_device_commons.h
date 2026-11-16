@@ -442,6 +442,7 @@ public:
 		uint32_t usage_bits = 0;
 		Vector<DataFormat> shareable_formats;
 		bool is_resolve_buffer = false;
+		bool is_gpu_mappable = false;
 		bool is_discardable = false;
 		bool is_subsampled = false;
 
@@ -1038,6 +1039,7 @@ public:
 		SUPPORTS_HDR_OUTPUT,
 		SUPPORTS_RASTERIZATION_RATE_MAP,
 		SUPPORTS_GPU_MAPPABLE_BUFFER,
+		SUPPORTS_GPU_MAPPABLE_TEXTURE,
 	};
 
 	enum SubgroupOperations {

@@ -290,6 +290,8 @@ public:
 	virtual void texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) = 0;
 	// Returns the data of a texture layer for a CPU texture that was created with TEXTURE_USAGE_CPU_READ_BIT.
 	virtual Vector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) = 0;
+	virtual Error texture_write_direct(TextureID p_texture, uint32_t p_layer, uint32_t p_mipmap, Vector3i p_size, const uint8_t *p_data, uint32_t p_row_pitch, uint32_t p_image_pitch){
+		return ERR_UNAVAILABLE;}
 	virtual BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) = 0;
 	virtual bool texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool &r_raw_reinterpretation) = 0;
 
