@@ -1763,6 +1763,8 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	Texture texture;
 	format.usage_bits |= forced_usage_bits;
+	// Textures with initial data and no GPU-write usage can be placed in CPU-mappable memory on unified-memory devices.
+	format.is_gpu_mappable = driver->has_feature(SUPPORTS_GPU_MAPPABLE_TEXTURE) && !data.is_empty() && !(format.usage_bits & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_STORAGE_ATOMIC_BIT));
 	texture.driver_id = driver->texture_create(format, tv);
 	ERR_FAIL_COND_V(!texture.driver_id, RID());
 	texture.type = format.texture_type;
@@ -1781,6 +1783,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	texture.samples = format.samples;
 	texture.allowed_shared_formats = format.shareable_formats;
 	texture.has_initial_data = !data.is_empty();
+	texture.is_gpu_mappable = format.is_gpu_mappable;
 
 	if (driver->api_trait_get(RDD::API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS)) {
 		// Check if a clear for this texture must be performed the first time it's used if the driver requires explicit clears after initialization.
@@ -2196,7 +2199,33 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 
 	uint32_t pixel_size = get_image_format_pixel_size(texture->format);
 	uint32_t block_size = get_compressed_image_format_block_byte_size(texture->format);
+	
+	// UMA: write directly into the CPU-mappable texture, skipping the staging buffer and the GPU copy.
+	if (texture->is_gpu_mappable) {
+			uint32_t mipmap_offset = 0;              // Wo im p_data beginnt die aktuelle Mipmap-Stufe?
+			uint32_t logic_width = texture->width;   // Sichtbare Breite der aktuellen Stufe
+			uint32_t logic_height = texture->height; // Sichtbare Höhe der aktuellen Stufe
 
+			for (uint32_t mm_i = 0; mm_i < texture->mipmaps; mm_i++) {
+				// Größe dieser Stufe ausrechnen (width/height/depth werden hier befüllt).
+				uint32_t depth = 0;
+				uint32_t image_total = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, mm_i + 1, &width, &height, &depth);
+
+				// Bytes pro Zeile und Bytes pro Bild dieser Stufe.
+				uint32_t row_pitch = get_compressed_image_format_pixels_shifted(texture->format, width * pixel_size * block_w);
+				uint32_t image_pitch = (image_total - mipmap_offset) / depth;
+
+				// ??? ← HIER: deine Methode aufrufen
+				driver -> texture_write_direct(texture -> driver_id,p_layer, mm_i,Vector3i(logic_width, logic_height, depth),p_data.ptr() + mipmap_offset,row_pitch, image_pitch);
+
+				// Zur nächsten Stufe: Startpunkt weiterschieben, Größe halbieren.
+				mipmap_offset = image_total;
+				logic_width = MAX(1u, logic_width >> 1);
+				logic_height = MAX(1u, logic_height >> 1);
+			}
+			print_verbose(vformat("UMA direct upload: %dx%d, %d mipmaps, layer %d", texture->width, texture->height, texture->mipmaps, p_layer));
+			return OK;
+		}
 	// The algorithm operates on two passes, one to figure out the total size the staging buffer will require to allocate and another one where the copy is actually performed.
 	uint32_t staging_worker_offset = 0;
 	uint32_t staging_local_offset = 0;

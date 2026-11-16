@@ -372,6 +372,7 @@ public:
 		bool is_subsampled = false;
 		bool has_initial_data = false;
 		bool pending_clear = false;
+		bool is_gpu_mappable = false;
 
 		BitField<RDD::TextureAspectBits> read_aspect_flags = {};
 		BitField<RDD::TextureAspectBits> barrier_aspect_flags = {};
